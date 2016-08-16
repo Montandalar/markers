@@ -1,9 +1,30 @@
+local S
+if minetest.get_modpath("intllib") then
+	S = intllib.Getter()
+else
+	S = function(s, a, ...)
+		if a == nil then
+			return s
+		end
+		a = {a, ...}
+		return s:gsub("(@?)@(%(?)(%d+)(%)?)",
+			function(e, o, n, c)
+				if e == ""then
+					return a[tonumber(n)] .. (o == "" and c or "")
+				else
+					return "@" .. o .. n .. c
+				end
+			end)
+		end
+end
+
 
 -- markers are useful for measuring distances and for marking areas
 -- markers are protected from digging by other players for one day
 -- (the protection for the *marker* auto-expires then, and it can be digged)
 
 markers = {}
+markers.intllib = S
 
 dofile(minetest.get_modpath("markers").."/config.lua");
 dofile(minetest.get_modpath("markers").."/areas.lua");
@@ -48,14 +69,14 @@ end
 -- You can return somethiing like "for free" or "the promise to build anything good" as well as any
 -- real prices in credits or materials - it's really just a text here.
 -- Make sure you do not charge the player more than what you ask here.
-markers.calculate_area_price_text = function( pos1, pos2, playername )
+markers.calculate_area_price = function( pos1, pos2, playername )
 
-   local price = ( math.abs( pos1.x - pos2.x )+1 )
-               * ( math.abs( pos1.z - pos2.z )+1 );
+   local price = math.ceil(( math.abs( pos1.x - pos2.x )+1 )
+	 * ( math.abs( pos1.z - pos2.z )+1 ) * (0.27* 1/(0.1+0.01*math.sqrt(pos1.x*pos2.x +pos1.z*pos2.z))));
 
 --               * math.ceil( ( math.abs( pos1.y - pos2.y )+1 )/10);
 
-   return tostring( price )..' credits';
+   return price;
 end
 
 
@@ -314,8 +335,8 @@ markers.get_marker_formspec = function(player, pos, error_msg)
                     "button_exit[2,6.0;2,0.5;abort;OK]";
     else
        formspec =   formspec..
---                    'label[0.5,2.0;Buying this area will cost you ]'..
---                    'label[4.7,2.0;'..markers.calculate_area_price_text( coords[1], coords[2], name )..'.]'..
+                    'label[0.5,2.0;Buying this area will cost you ]'..
+	  'label[4.7,2.0;'.. '$ ' ..tostring(markers.calculate_area_price( coords[1], coords[2], name ))..'.]'..
 
                     'label[0.5,3.0;Your area ought to go..]'..
                     'label[0.5,3.5;this many blocks up:]'..
@@ -410,6 +431,17 @@ markers.marker_on_receive_fields = function(pos, formname, fields, sender)
    -- those coords lack the height component
    local pos1 = coords[1];
    local pos2 = coords[2];
+   local price = markers.calculate_area_price(pos1,pos2,"")
+   if not atm.balance[name] then
+      atm.balance[name] = 0
+   end
+   if atm.balance[name] < price then
+      minetest.chat_send_player(name, "You can't protect that area: Not enough money")
+      return
+   end
+   atm.readaccounts()
+   atm.balance[name] = atm.balance[name] - price
+   atm.saveaccounts()
    -- apply height values from the formspeck
    pos1.y = pos1.y - add_depth;
    pos2.y = pos2.y + add_height;
@@ -428,6 +460,7 @@ markers.marker_on_receive_fields = function(pos, formname, fields, sender)
       minetest.show_formspec( name, "markers:mark", markers.get_marker_formspec(sender, pos, errMsg));
       return
    end
+
 
    local id = areas:add(name, fields['set_area_name'], pos1, pos2, nil)
    areas:save()
@@ -525,6 +558,58 @@ minetest.register_node("markers:mark", {
 			);
 	end,
 })
+
+markers.generate_buy_formspec = function(meta, player)
+   local price = minetest.deserialize(meta:get_string("price")) or 15
+   if not atm.balance[player] then
+      atm.balance[player] = 0
+      atm.saveaccounts()
+   end
+   local formspec = "size[8,7]"
+      .. default.gui_bg
+      .. default.gui_bg_img
+      .. default.gui_slots
+      .. "label[2.5,0;" .. S("-- Sell area --") .. "]"
+      .. "label[2.5,1;" .. S("Price: $") .. price .. "]" ..
+      "label[2.5,2;" .. S("Your account balance: $") .. atm.balance[player] .. "]" ..
+      "button_exit[1.5,6.2;3,0.5;cancel;" .. S("Cancel") .. "]" .. "button_exit[4.6,6.2;3,0.5;ok;Buy]"
+   return formspec
+end
+
+minetest.register_node("markers:protect_sell", {
+	description = S("Protection Block For Sale"),
+	drawtype = "nodebox",
+	tiles = {
+		"forsale.png",
+		"forsale.png",
+		"forsale.png^protector_logo.png"
+	},
+	sounds = default.node_sound_stone_defaults(),
+	groups = {dig_immediate = 2, unbreakable = 1},
+	is_ground_content = false,
+	paramtype = "light",
+	light_source = 4,
+	node_box = {
+		type = "fixed",
+		fixed = {
+			{-0.5 ,-0.5, -0.5, 0.5, 0.5, 0.5},
+		}
+	},
+	on_rightclick = function(pos, node, clicker, itemstack)
+	   
+	   local meta = minetest.get_meta(pos)
+	   minetest.show_formspec(clicker:get_player_name(), 
+				  "protector_sell:node_" .. minetest.pos_to_string(pos), markers.generate_buy_formspec(meta, clicker:get_player_name()))
+	end,
+
+	can_dig = function(pos, player)
+
+		return protector.can_dig(1, pos, player:get_player_name(), true, 1)
+	end,
+
+	on_blast = function() end,
+})
+
 
 
 minetest.register_craft({
