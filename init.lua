@@ -72,7 +72,7 @@ end
 markers.calculate_area_price = function( pos1, pos2, playername )
 
    local price = math.ceil(( math.abs( pos1.x - pos2.x )+1 )
-	 * ( math.abs( pos1.z - pos2.z )+1 ) * (0.27* 1/(0.1+0.01*math.sqrt(pos1.x*pos2.x +pos1.z*pos2.z))));
+	 * ( math.abs( pos1.z - pos2.z )+1 ) * (0.07* markers.surrounding_areas(pos1,100)+0.031));
 
 --               * math.ceil( ( math.abs( pos1.y - pos2.y )+1 )/10);
 
@@ -257,7 +257,23 @@ markers.get_box_from_markers = function(name)
   return min_pos, max_pos
 end --get_box_from_markers
 
-
+markers.surrounding_areas = function (ppos, r)
+   local id_list = {};
+   for id, area in pairs(areas.areas) do
+      
+      if( not( area.parent )
+           -- ppos is always available
+	     and(   (area.pos1.x >= ppos.x-r and area.pos1.x <= ppos.x+r )
+		   or(area.pos2.x >= ppos.x-r and area.pos2.x <= ppos.x+r ))
+	     and(   (area.pos1.y >= ppos.y-r and area.pos1.y <= ppos.y+r )
+		   or(area.pos2.y >= ppos.y-r and area.pos2.y <= ppos.y+r ))
+	     and(   (area.pos1.z >= ppos.z-r and area.pos1.z <= ppos.z+r )
+                or(area.pos2.z >= ppos.z-r and area.pos2.z <= ppos.z+r ))) then
+	 table.insert( id_list, id );
+      end
+   end
+   return #id_list
+end
 
 markers.get_marker_formspec = function(player, pos, error_msg)
    local formspec = "";
