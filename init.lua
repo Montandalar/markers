@@ -72,7 +72,7 @@ end
 markers.calculate_area_price = function( pos1, pos2, playername )
 
    local price = math.ceil(( math.abs( pos1.x - pos2.x )+1 )
-	 * ( math.abs( pos1.z - pos2.z )+1 ) * (0.07* markers.surrounding_areas(pos1,100)+0.031));
+	 * ( math.abs( pos1.z - pos2.z )+1 ) * (0.01* markers.surrounding_areas(pos1,50)+0.005));
 
 --               * math.ceil( ( math.abs( pos1.y - pos2.y )+1 )/10);
 
